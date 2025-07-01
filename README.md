@@ -5,7 +5,7 @@ You can listen onchain event faster than grpc.
 It can be used efficiently for trading bots like sniper, copy trading bot.
 
 ### Usage Product
-Coming soon!
+[Pumpfun Sniper](https://github.com/hodlwarden/jito-shredstream-pumpfun-sniper)
 
 ## Overview
 
