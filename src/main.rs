@@ -1,229 +1,336 @@
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::collections::HashMap;
-use tokio::sync::mpsc;
-use tokio::time::{Duration, Instant};
-use futures_util::StreamExt;
-use futures_util::SinkExt;
-use dotenvy::dotenv;
-use chrono::Local;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-
-struct Stats {
-    grpc_first: AtomicU64,
-    shred_first: AtomicU64,
-    grpc_delay_sum: AtomicU64,
-    shred_delay_sum: AtomicU64,
-    grpc_delay_count: AtomicU64,
-    shred_delay_count: AtomicU64,
-}
-
-impl Stats {
-    fn new() -> Self {
-        Self {
-            grpc_first: AtomicU64::new(0),
-            shred_first: AtomicU64::new(0),
-            grpc_delay_sum: AtomicU64::new(0),
-            shred_delay_sum: AtomicU64::new(0),
-            grpc_delay_count: AtomicU64::new(0),
-            shred_delay_count: AtomicU64::new(0),
-        }
+use {
+    async_trait::async_trait, borsh::BorshDeserialize, carbon_core::{
+        deserialize::{ArrangeAccounts, CarbonDeserialize},
+        error::CarbonResult,
+        instruction::{
+            DecodedInstruction, InstructionMetadata, InstructionProcessorInputType,
+            NestedInstructions,
+        },
+        metrics::MetricsCollection,
+        processor::Processor,
+    }, carbon_log_metrics::LogMetrics, carbon_pumpfun_decoder::{
+        instructions::{
+            buy::Buy, create::Create, create_event::CreateEvent, sell::Sell, trade_event::TradeEvent, PumpfunInstruction
+        }, PumpfunDecoder, PROGRAM_ID as PUMPFUN_PROGRAM_ID
+    }, carbon_raydium_launchpad_decoder::{
+        instructions::{
+            buy_exact_in::BuyExactIn, sell_exact_in::SellExactIn, trade_event::TradeEvent as BonkTradeEvent, RaydiumLaunchpadInstruction
+        }, RaydiumLaunchpadDecoder, PROGRAM_ID as RAY_LAUNCHPAD_PROGRAM_ID
+    }, carbon_yellowstone_grpc_datasource::YellowstoneGrpcGeyserClient, chrono::Utc, core::panic, once_cell::sync::Lazy, pumpfun_monitor::{
+        config::{
+            init_jito, init_nozomi, init_zslot, targetlist, BUY_SOL_AMOUNT, CONFIRM_SERVICE, JITO_CLIENT, NOZOMI_CLIENT, PRIORITY_FEE, PUBKEY, RPC_CLIENT, SLIPPAGE, TARGET_DEX, ZSLOT_CLIENT
+        },
+        instructions::{
+            buy_ix::BuyExactInInstructionAccountsExt,
+            ray_buy_tx::BuyExactInInstructionAccountsExt as RayBuyExt,
+            ray_sell_tx::SellExactInInstructionAccountsExt as RaySellExt,
+            sell_ix::SellExactInInstructionAccountsExt, types::TradeEventTemp,
+        },
+        service::Tips,
+        utils::{
+            blockhash::{get_slot, recent_blockhash_handler}, build_and_sign, get_swap_quote, sol_token_quote, token_sol_quote, TRADE_EVENT_DISC
+        },
+    }, serde_json::json, solana_client::nonblocking::rpc_client, solana_sdk::{commitment_config::CommitmentConfig, transaction}, solana_transaction_status_client_types::InnerInstruction, spl_associated_token_account::{
+        get_associated_token_address, instruction::create_associated_token_account_idempotent,
+    }, std::{
+        collections::{HashMap, HashSet},
+        env,
+        ops::{Add, Sub},
+        sync::Arc,
+        time::Duration,
+        vec,
+    }, tokio::{sync::RwLock, time::sleep}, yellowstone_grpc_proto::geyser::{
+        CommitmentLevel, SubscribeRequestFilterAccounts, SubscribeRequestFilterTransactions,
     }
-
-    fn print_stats(&self) {
-        let total = self.grpc_first.load(Ordering::Relaxed) + self.shred_first.load(Ordering::Relaxed);
-        let grpc_first_percent = (self.grpc_first.load(Ordering::Relaxed) as f64 / total as f64) * 100.0;
-        let shred_first_percent = (self.shred_first.load(Ordering::Relaxed) as f64 / total as f64) * 100.0;
-        
-        let grpc_avg_delay = if self.grpc_delay_count.load(Ordering::Relaxed) > 0 {
-            self.grpc_delay_sum.load(Ordering::Relaxed) as f64 / self.grpc_delay_count.load(Ordering::Relaxed) as f64
-        } else { 0.0 };
-        
-        let shred_avg_delay = if self.shred_delay_count.load(Ordering::Relaxed) > 0 {
-            self.shred_delay_sum.load(Ordering::Relaxed) as f64 / self.shred_delay_count.load(Ordering::Relaxed) as f64
-        } else { 0.0 };
-
-        let overall_grpc_avg = (self.grpc_delay_sum.load(Ordering::Relaxed) as f64) / total as f64;
-        let overall_shred_avg = (self.shred_delay_sum.load(Ordering::Relaxed) as f64) / total as f64;
-
-        println!("[{}] INFO: ===== Endpoint Performance Comparison =====", Local::now().format("%H:%M:%S%.3f"));
-        println!("[{}] INFO: GRPC   : First received {:6.2}%, avg delay when behind {:6.2}ms, overall avg delay {:6.2}ms", 
-            Local::now().format("%H:%M:%S%.3f"),
-            grpc_first_percent,
-            grpc_avg_delay,
-            overall_grpc_avg
-        );
-        println!("[{}] INFO: SHRED  : First received {:6.2}%, avg delay when behind {:6.2}ms, overall avg delay {:6.2}ms", 
-            Local::now().format("%H:%M:%S%.3f"),
-            shred_first_percent,
-            shred_avg_delay,
-            overall_shred_avg
-        );
-    }
-}
-
-async fn run_grpc_client(tx: mpsc::Sender<(u64, u128)>) {
-    dotenv().ok();
-    let url = std::env::var("GRPC_URL").expect("GRPC_URL must be set");
-    let mut client = yellowstone_grpc_client::GeyserGrpcClient::build_from_shared(url)
-        .unwrap()
-        .tls_config(yellowstone_grpc_client::ClientTlsConfig::new().with_native_roots())
-        .unwrap()
-        .connect()
-        .await
-        .unwrap();
-
-    let subscribe_request = yellowstone_grpc_proto::geyser::SubscribeRequest {
-        transactions: std::collections::HashMap::from([(
-            "client".to_string(),
-            yellowstone_grpc_proto::geyser::SubscribeRequestFilterTransactions {
-                vote: Some(false),
-                failed: Some(false),
-                signature: None,
-                account_include: vec![],
-                account_exclude: vec![],
-                account_required: vec![],
-            },
-        )]),
-        commitment: Some(yellowstone_grpc_proto::geyser::CommitmentLevel::Processed.into()),
-        ..Default::default()
-    };
-
-    let (mut subscribe_tx, mut stream) = client
-        .subscribe_with_request(Some(subscribe_request))
-        .await
-        .unwrap();
-
-    let mut last_slot = 0;
-    while let Some(message) = stream.next().await {
-        match message {
-            Ok(msg) => {
-                match msg.update_oneof {
-                    Some(yellowstone_grpc_proto::geyser::subscribe_update::UpdateOneof::Transaction(sut)) => {
-                        if sut.slot != last_slot {
-                            last_slot = sut.slot;
-                            let timestamp = SystemTime::now()
-                                .duration_since(UNIX_EPOCH)
-                                .unwrap()
-                                .as_millis();
-                            let _ = tx.send((sut.slot, timestamp)).await;
-                        }
-                    }
-                    Some(yellowstone_grpc_proto::geyser::subscribe_update::UpdateOneof::Ping(_)) => {
-                        let _ = subscribe_tx
-                            .send(yellowstone_grpc_proto::geyser::SubscribeRequest {
-                                ping: Some(yellowstone_grpc_proto::geyser::SubscribeRequestPing { id: 1 }),
-                                ..Default::default()
-                            })
-                            .await;
-                    }
-                    _ => {}
-                }
-            }
-            Err(_) => break,
-        }
-    }
-}
-
-async fn run_shred_client(tx: mpsc::Sender<(u64, u128)>) {
-    dotenv().ok();
-    let url = std::env::var("SHRED_URL").expect("SHRED_URL must be set");
-    let mut client = jito_protos::shredstream::shredstream_proxy_client::ShredstreamProxyClient::connect(url)
-        .await
-        .unwrap();
-    let mut stream = client
-        .subscribe_entries(jito_protos::shredstream::SubscribeEntriesRequest {})
-        .await
-        .unwrap()
-        .into_inner();
-
-    let mut processed_slots = std::collections::HashSet::new();
-    while let Some(slot_entry) = stream.message().await.unwrap() {
-        let _entries = match bincode::deserialize::<Vec<solana_entry::entry::Entry>>(&slot_entry.entries) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-
-        if !processed_slots.contains(&slot_entry.slot) {
-            processed_slots.insert(slot_entry.slot);
-            let timestamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_millis();
-            let _ = tx.send((slot_entry.slot, timestamp)).await;
-        }
-    }
-}
+};
 
 #[tokio::main]
-async fn main() {
-    println!("[{}] INFO: Starting GRPC and SHRED service performance comparison...", Local::now().format("%H:%M:%S%.3f"));
-    println!("[{}] INFO: Test duration: 30 seconds", Local::now().format("%H:%M:%S%.3f"));
-    println!("[{}] INFO: Test endpoints: GRPC, SHRED", Local::now().format("%H:%M:%S%.3f"));
+pub async fn main() -> CarbonResult<()> {
+    env_logger::init();
+    dotenv::dotenv().ok();
 
-    let (grpc_tx, mut grpc_rx) = mpsc::channel::<(u64, u128)>(100);
-    let (shred_tx, mut shred_rx) = mpsc::channel::<(u64, u128)>(100);
+    init_nozomi().await;
+    init_zslot().await;
+    init_jito().await;
 
-    tokio::spawn(run_grpc_client(grpc_tx));
-    tokio::spawn(run_shred_client(shred_tx));
-
-    let mut grpc_slots = HashMap::new();
-    let mut shred_slots = HashMap::new();
-    let stats = Arc::new(Stats::new());
-    let stats_clone = stats.clone();
-
-    let start_time = SystemTime::now();
-    let mut first_slot_received = false;
-
-    loop {
-        tokio::select! {
-            Some((slot, timestamp)) = grpc_rx.recv() => {
-                grpc_slots.insert(slot, timestamp);
-                if let Some(shred_ts) = shred_slots.get(&slot) {
-                    let diff = timestamp as i128 - *shred_ts as i128;
-                    if !first_slot_received {
-                        println!("[{}] INFO: All endpoints have received the first slot, starting official statistics...", 
-                            Local::now().format("%H:%M:%S%.3f"));
-                        first_slot_received = true;
-                    }
-                    if diff < 0 {
-                        stats.grpc_first.fetch_add(1, Ordering::Relaxed);
-                        stats.shred_delay_sum.fetch_add((-diff) as u64, Ordering::Relaxed);
-                        stats.shred_delay_count.fetch_add(1, Ordering::Relaxed);
-                    } else {
-                        stats.shred_first.fetch_add(1, Ordering::Relaxed);
-                        stats.grpc_delay_sum.fetch_add(diff as u64, Ordering::Relaxed);
-                        stats.grpc_delay_count.fetch_add(1, Ordering::Relaxed);
-                    }
-                }
-            }
-            Some((slot, timestamp)) = shred_rx.recv() => {
-                shred_slots.insert(slot, timestamp);
-                if let Some(grpc_ts) = grpc_slots.get(&slot) {
-                    let diff = timestamp as i128 - *grpc_ts as i128;
-                    if !first_slot_received {
-                        println!("[{}] INFO: All endpoints have received the first slot, starting official statistics...", 
-                            Local::now().format("%H:%M:%S%.3f"));
-                        first_slot_received = true;
-                    }
-                    if diff < 0 {
-                        stats.shred_first.fetch_add(1, Ordering::Relaxed);
-                        stats.grpc_delay_sum.fetch_add((-diff) as u64, Ordering::Relaxed);
-                        stats.grpc_delay_count.fetch_add(1, Ordering::Relaxed);
-                    } else {
-                        stats.grpc_first.fetch_add(1, Ordering::Relaxed);
-                        stats.shred_delay_sum.fetch_add(diff as u64, Ordering::Relaxed);
-                        stats.shred_delay_count.fetch_add(1, Ordering::Relaxed);
-                    }
-                }
+    tokio::spawn({
+        async move {
+            loop {
+                recent_blockhash_handler(RPC_CLIENT.clone()).await;
             }
         }
+    });
 
-        if let Ok(duration) = start_time.elapsed() {
-            if duration.as_secs() >= 30 {
-                stats_clone.print_stats();
-                break;
+    println!("TARGET_DEX : {}", TARGET_DEX.to_string());
+
+    // NOTE: Workaround, that solving issue https://github.com/rustls/rustls/issues/1877
+    rustls::crypto::aws_lc_rs::default_provider()
+        .install_default()
+        .expect("Can't set crypto provider to aws_lc_rs");
+
+    let targetlist = targetlist::Targetlist::new("targetlist.txt")
+        .unwrap_or_else(|_| targetlist::Targetlist::empty());
+
+    let mut account_include = targetlist.addresses;
+    account_include.push("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s".to_string());
+
+    let transaction_filter = SubscribeRequestFilterTransactions {
+        vote: Some(false),
+        failed: Some(false),
+        account_include: account_include,
+        account_exclude: vec![],
+        account_required: vec!["FfYek5vEz23cMkWsdJwG2oa6EphsvXSHrGpdALN4g6W1".to_string()],
+        signature: None,
+    };
+
+    println!("Using payer: {}", *PUBKEY);
+
+    let mut transaction_filters: HashMap<String, SubscribeRequestFilterTransactions> =
+        HashMap::new();
+
+    transaction_filters.insert(
+        "jupiter_swap_transaction_filter".to_string(),
+        transaction_filter,
+    );
+
+    let yellowstone_grpc = YellowstoneGrpcGeyserClient::new(
+        env::var("GEYSER_URL").unwrap_or_default(),
+        env::var("X_TOKEN").ok(),
+        Some(CommitmentLevel::Processed),
+        HashMap::new(),
+        transaction_filters.clone(),
+        Default::default(),
+        Arc::new(RwLock::new(HashSet::new())),
+    );
+
+    println!("Starting Pump-Bonk Monitor...");
+
+    carbon_core::pipeline::Pipeline::builder()
+        .datasource(yellowstone_grpc)
+        // .datasource(helius_laserstream)
+        .metrics(Arc::new(LogMetrics::new()))
+        .metrics_flush_interval(3)
+        .instruction(RaydiumLaunchpadDecoder, RayLaunchPadProcess)
+        .shutdown_strategy(carbon_core::pipeline::ShutdownStrategy::Immediate)
+        .build()?
+        .run()
+        .await?;
+
+    println!("Pump-Bonk Monitor has stopped.");
+
+    Ok(())
+}
+
+pub struct PumpfunProcess;
+
+pub static SIGNATURES: Lazy<RwLock<HashSet<String>>> = Lazy::new(|| RwLock::new(HashSet::new()));
+
+pub struct RayLaunchPadProcess;
+
+#[async_trait]
+impl Processor for RayLaunchPadProcess {
+    type InputType = InstructionProcessorInputType<RaydiumLaunchpadInstruction>;
+
+    async fn process(
+        &mut self,
+        (metadata, instruction, nested_instructions, instructions): Self::InputType,
+        _metrics: Arc<MetricsCollection>,
+    ) -> CarbonResult<()> {
+        let signature = metadata.transaction_metadata.signature;
+
+        let static_account_keys = metadata.transaction_metadata.message.static_account_keys();
+        let writable_account_keys = &metadata.transaction_metadata.meta.loaded_addresses.writable;
+        let readonly_account_keys = &metadata.transaction_metadata.meta.loaded_addresses.readonly;
+
+        let mut account_keys: Vec<solana_sdk::pubkey::Pubkey> = vec![];
+
+        account_keys.extend(static_account_keys);
+        account_keys.extend(writable_account_keys);
+        account_keys.extend(readonly_account_keys);
+
+        let instruction_clone: DecodedInstruction<RaydiumLaunchpadInstruction> =
+            instruction.clone();
+
+        let start = std::time::Instant::now();
+
+        let raw_instruction = match instruction.data {
+            RaydiumLaunchpadInstruction::BuyExactIn(buy_exact_in_data) => {
+
+                let account_length = instruction_clone.accounts.clone().len();
+                let accounts = instruction_clone.accounts.clone();
+
+                if let Some(mut arranged) =
+                    BuyExactIn::arrange_accounts(&instruction_clone.accounts)
+                {
+                    arranged.payer = *PUBKEY;
+                    arranged.user_base_token =
+                        get_associated_token_address(&PUBKEY, &arranged.base_token_mint);
+                    arranged.user_quote_token =
+                        get_associated_token_address(&PUBKEY, &arranged.quote_token_mint);
+
+                    let create_ata_ix = arranged.get_create_idempotent_ata_ix();
+
+                    let inner_ixs: Vec<&InnerInstruction> = metadata
+                        .transaction_metadata
+                        .meta
+                        .inner_instructions
+                        .as_ref()
+                        .expect("missing inner_instructions")
+                        .iter()
+                        .flat_map(|ixs| ixs.instructions.iter())
+                        .filter(|inner_ix| {
+                            // Get the program id index and check against RAY_LAUNCHPAD_PROGRAM_ID
+                            let program_id_index = inner_ix.instruction.program_id_index as usize;
+                            let program_id = account_keys
+                                .get(program_id_index)
+                                .expect("program id index out of bounds");
+
+                            // Get the first account index
+                            let first_account_index_opt = inner_ix.instruction.accounts.first();
+                            if let Some(&first_account_index) = first_account_index_opt {
+                                let first_account = account_keys
+                                    .get(first_account_index as usize)
+                                    .expect("account index out of bounds");
+
+                                // Check the conditions
+                                *program_id == RAY_LAUNCHPAD_PROGRAM_ID
+                                    && *first_account == arranged.event_authority
+                            } else {
+                                false // no first account, so filter out
+                            }
+                        })
+                        .collect();
+
+                    let Some(swap_cpi_ix) = inner_ixs.last() else {
+                        println!("No Swap Event found");
+                        return Ok(()); // or Err(...) depending on your logic
+                    };
+
+                    println!("Sig : {}", signature.to_string());
+
+                    let buy_param = BuyExactIn {
+                        amount_in: BUY_SOL_AMOUNT.clone(),
+                        minimum_amount_out: 0,
+                        share_fee_rate: 0,
+                    };
+
+                    let account1 = accounts[account_length - 3].pubkey;
+                    let account2 = accounts[account_length - 2].pubkey;
+                    let account3 = accounts[account_length - 1].pubkey;
+
+                    let buy_ix = arranged.get_buy_ix(buy_param.clone(), account1, account2, account3);
+
+                    let mut instructions = vec![];
+                    instructions.extend(create_ata_ix);
+                    instructions.push(buy_ix);
+
+                    instructions
+                } else {
+                    println!("Failed to arrange accounts");
+
+                    vec![]
+                }
             }
-        }
+            _ => {
+                vec![]
+            }
+        };
+
+        if !raw_instruction.is_empty() {
+            let (cu, priority_fee_micro_lamport, third_party_fee) = *PRIORITY_FEE;
+
+            // Print current timestamp and consumed time from start
+            println!(
+                "Submitting tx --> Current time: {:#?}\nPeriod from start: {:?}",
+                Utc::now(),
+                start.elapsed()
+            );
+
+            let results = match CONFIRM_SERVICE.as_str() {
+                "NOZOMI" => {
+                    let nozomi = NOZOMI_CLIENT.get().expect("Nozomi client not initialized");
+
+                    let ixs = nozomi.add_tip_ix(Tips {
+                        cu: Some(cu),
+                        priority_fee_micro_lamport: Some(priority_fee_micro_lamport),
+                        payer: *PUBKEY,
+                        pure_ix: raw_instruction.clone(),
+                        tip_addr_idx: 1,
+                        tip_sol_amount: third_party_fee,
+                    });
+
+
+                    let recent_blockhash = get_slot();
+
+                    let encoded_tx = build_and_sign(ixs, recent_blockhash, None);
+
+                    match nozomi.send_transaction(&encoded_tx).await {
+                        Ok(data) => json!({ "result": data }),
+                        Err(err) => {
+                            json!({ "result": "error", "message": err.to_string() })
+                        }
+                    }
+                }
+                "ZERO_SLOT" => {
+                    let zero_slot = ZSLOT_CLIENT.get().expect("ZSlot client not initialized");
+
+                    let ixs = zero_slot.add_tip_ix(Tips {
+                        cu: Some(cu),
+                        priority_fee_micro_lamport: Some(priority_fee_micro_lamport),
+                        payer: *PUBKEY,
+                        pure_ix: raw_instruction,
+                        tip_addr_idx: 1,
+                        tip_sol_amount: third_party_fee,
+                    });
+
+                    let recent_blockhash = get_slot();
+
+                    let encoded_tx = build_and_sign(ixs, recent_blockhash, None);
+
+                    match zero_slot.send_transaction(&encoded_tx).await {
+                        Ok(data) => json!({ "result": data }),
+                        Err(err) => {
+                            json!({ "result": "error", "message": err.to_string() })
+                        }
+                    }
+                }
+                "JITO" => {
+                    let jito = JITO_CLIENT.get().expect("Jito client not initialized");
+
+                    let ixs = jito.add_tip_ix(Tips {
+                        cu: Some(cu),
+                        priority_fee_micro_lamport: Some(priority_fee_micro_lamport),
+                        payer: *PUBKEY,
+                        pure_ix: raw_instruction,
+                        tip_addr_idx: 1,
+                        tip_sol_amount: third_party_fee,
+                    });
+
+                    let recent_blockhash = get_slot();
+
+                    let encoded_tx = build_and_sign(ixs, recent_blockhash, None);
+
+                    match jito.send_transaction(&encoded_tx).await {
+                        Ok(data) => json!({ "result": data }),
+                        Err(err) => {
+                            json!({ "result": "error", "message": err.to_string() })
+                        }
+                    }
+                }
+                _ => {
+                    json!({ "result": "error", "message": "unknown confirmation service" })
+                }
+            };
+
+            // println!("Transaction confirmed --> : {:#?}\nCurrent time: {:#?}\nPeriod from start: {:?}", results, Utc::now(), start.elapsed());
+            panic!(
+                "Transaction confirmed --> : {:#?}\nCurrent time: {:#?}\nPeriod from start: {:?}",
+                results,
+                Utc::now(),
+                start.elapsed()
+            );
+        };
+
+        Ok(())
     }
 }
