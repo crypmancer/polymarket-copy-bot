@@ -1,0 +1,40 @@
+{
+  "name": "Pumpfun Bundler Mayhem Mode Token2022",
+  "version": "1.0.0",
+  "description": "",
+  "author": "",
+  "main": "index.ts",
+  "scripts": {
+    "start": "ts-node index.ts"
+  },
+  "keywords": [],
+  "license": "ISC",
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.0",
+    "@coral-xyz/borsh": "^0.31.1",
+    "@metaplex-foundation/js": "^0.19.4",
+    "@metaplex-foundation/mpl-token-metadata": "^2.9.1",
+    "@openbook-dex/openbook": "^0.0.9",
+    "@project-serum/serum": "^0.13.65",
+    "@raydium-io/raydium-sdk": "^1.3.1-beta.48",
+    "@solana/spl-token": "^0.4.7",
+    "@solana/web3.js": "^1.94.0",
+    "axios": "^1.7.2",
+    "bn.js": "^5.2.1",
+    "bs58": "^6.0.0",
+    "dotenv": "^16.4.1",
+    "jito-ts": "^4.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "path": "^0.12.7",
+    "typescript": "^5.5.3",
+    "winston": "^3.11.0",
+    "undici": "^6.19.2"
+  },
+  "devDependencies": {
+    "@types/bn.js": "^5.1.5",
+    "@types/jsonwebtoken": "^9.0.10",
+    "prettier": "^3.2.4",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0"
+  }
+}
