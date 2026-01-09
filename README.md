@@ -1,204 +1,222 @@
-# Pumpfun Bundler Mayhem Mode Token2022
+# Polymarket Arbitrage + Copy Trading Bot
 
-A TypeScript-based Solana bundler for creating and trading tokens on Pump.fun with Token2022 support. This tool enables automated token creation, pool creation, and bundle transaction execution using Jito bundles and BloxRoute for optimal transaction execution.
+A sophisticated trading bot that combines **arbitrage detection** and **copy trading** strategies on Polymarket. This bot monitors successful wallets (like arbitrage-focused bots) and selectively copies their trades when arbitrage opportunities are detected.
 
 ## Features
 
-- 🚀 **Token Creation**: Create new tokens on Pump.fun with custom metadata
-- 💰 **Bundle Pool Buy**: Execute coordinated buy transactions across multiple wallets using Jito bundles
-- 📦 **Bundle Transactions**: Leverage Jito block engine and BloxRoute for fast transaction execution
-- 🔄 **Automated Selling**: Sell tokens from all wallets with a single command
-- 💼 **Multi-Wallet Management**: Create and manage multiple wallets for coordinated trading
-- 📊 **Balance Checking**: Monitor SOL and token balances across all wallets
-- 🎨 **Metadata Support**: Upload token metadata to IPFS via Pinata
-- 🔐 **Token2022 Support**: Full support for Token2022 standard
+### 🎯 Dual Strategy Approach
+- **Arbitrage Detection**: Automatically detects risk-free arbitrage opportunities (YES + NO < $1)
+- **Copy Trading**: Monitors and replicates trades from proven wallets
+- **Hybrid Filtering**: Only copies trades when arbitrage signals align
 
-## Prerequisites
+### 🔍 Key Capabilities
+- Real-time wallet monitoring for target addresses
+- Internal arbitrage detection (YES+NO mispricings)
+- Cross-platform arbitrage support (extensible to Kalshi, etc.)
+- Risk management with position limits and daily loss controls
+- Automatic hedging for unbalanced positions
+- Configurable position sizing and filters
 
-- Node.js (v16 or higher)
-- npm or yarn
-- TypeScript
-- Solana CLI (optional, for wallet management)
-- Environment variables configured (see Configuration section)
+### 🛡️ Risk Management
+- Total exposure limits
+- Per-market position caps
+- Daily loss limits
+- Minimum liquidity requirements
+- Slippage protection
 
-## Installation
+## Architecture
 
-1. Clone the repository:
-```bash
-git clone https://github.com/hodlwarden/pumpfun-mayhem-bundler-token2022.git
-cd pumpfun-mayhem-bundler-token2022
+```
+src/
+├── bot.ts                    # Main orchestrator
+├── config.ts                 # Configuration management
+├── polymarket-client.ts      # Polymarket API client
+├── arbitrage-detector.ts     # Arbitrage opportunity detection
+├── wallet-monitor.ts         # Wallet activity monitoring
+├── copy-trader.ts           # Copy trading execution engine
+├── risk-manager.ts          # Risk limits and position tracking
+└── order-executor.ts        # Order placement and management
 ```
 
-2. Install dependencies:
+## Setup
+
+### 1. Install Dependencies
+
 ```bash
 npm install
-# or
-yarn install
 ```
 
-3. Configure environment variables (see Configuration section)
+### 2. Configure Environment
 
-4. Run the application:
+Copy `.env.example` to `.env` and fill in your settings:
+
 ```bash
+cp .env.example .env
+```
+
+Key settings:
+- `TARGET_WALLET_1`: Wallet address to copy trade (get from Polymarket profile)
+- `PRIVATE_KEY`: Your private key for signing orders (required for order execution)
+- `POLYGON_RPC_URL`: Polygon RPC endpoint for on-chain monitoring (required)
+- `MAX_TOTAL_EXPOSURE_USD`: Maximum total exposure limit
+- `MIN_ARB_PROFIT_PCT`: Minimum arbitrage profit % to execute
+
+### 3. Get Wallet Address
+
+To find a wallet address from a Polymarket username:
+1. Visit the profile (e.g., `https://polymarket.com/@gabagool22`)
+2. Check the profile page or use browser dev tools to find the wallet address
+3. Alternatively, use Polymarket Analytics or Dune queries
+
+### 4. Build and Run the Bot
+
+```bash
+# Build TypeScript
+npm run build
+
+# Run the bot
 npm start
-# or
-yarn start
+
+# Or run in development mode with auto-reload
+npm run dev
 ```
 
 ## Configuration
 
-### Environment Variables
+### Wallet Configuration
 
-Create a `.env` file in the root directory with the following variables:
+Edit `src/config.ts` or use environment variables to configure target wallets:
 
-```env
-# Jito Configuration
-BLOCKENGINE_URL=your_blockengine_url
-JITO_KEY=your_jito_private_key_base58
-
-# Network Configuration
-CLUSTER=mainnet  # or 'devnet'
-MAINNET_RPC_URL=your_mainnet_rpc_url
-MAINNET_WEBSOCKET_URL=your_mainnet_websocket_url
-DEVNET_RPC_URL=your_devnet_rpc_url
-
-# Pinata IPFS Configuration
-PINATA_API_KEY=your_pinata_api_key
-PINATA_SECRET_API_KEY=your_pinata_secret_key
+```typescript
+{
+  address: "0x...",
+  name: "gabagool22",
+  enabled: true,
+  minWinRate: 0.70,
+  maxPositionSizeUsd: 2000.0,
+  positionSizeMultiplier: 0.01,  // Copy 1% of wallet's position size
+  requireArbSignal: true  // Only copy when arbitrage detected
+}
 ```
 
-### Settings
+### Arbitrage Settings
 
-Edit `settings.ts` to configure:
-- Token metadata (name, symbol, description, social links)
-- Buy amounts per wallet
-- Pool liquidity parameters
-- Number of wallets for bundle operations
-- LP token burn percentage
+- `minArbProfitPct`: Minimum profit % to execute (default: 1%)
+- `maxArbProfitPct`: Maximum expected profit % (default: 5%)
+- `internalArbEnabled`: Enable YES+NO arbitrage detection
+- `crossPlatformEnabled`: Enable cross-platform arbitrage (requires additional APIs)
 
-## Usage
+### Risk Limits
 
-The application provides an interactive menu with the following options:
+- `maxTotalExposureUsd`: Maximum total exposure across all positions
+- `maxPositionPerMarketUsd`: Maximum position size per market
+- `maxDailyLossUsd`: Daily loss limit before pausing trading
+- `enableAutoHedge`: Automatically hedge unbalanced positions
 
-### Main Menu Options
+## How It Works
 
-1. **Create Mint Address** - Generate a new token mint address
-2. **Create Pool And BundleBuy** - Create a token pool and execute bundle buy transactions
-3. **Sell All Tokens From All Wallets** - Sell all tokens from all configured wallets
-4. **Check All Wallets Balance** - Display SOL and token balances for all wallets
-5. **Exit** - Close the application
+### 1. Wallet Monitoring
+The bot continuously monitors configured wallet addresses for new trades via Polymarket's API or on-chain events.
 
-### Workflow
+### 2. Arbitrage Detection
+Simultaneously scans markets for arbitrage opportunities:
+- **Internal Arbitrage**: Detects when YES + NO prices sum to < $1 (risk-free profit)
+- **Cross-Platform**: Compares prices across platforms (extensible)
 
-1. **Create Mint Address**: First, create a mint address for your token
-2. **Create Pool And BundleBuy**: 
-   - Creates token metadata and uploads to IPFS
-   - Creates the bonding curve on Pump.fun
-   - Adds liquidity to the pool
-   - Executes bundle buy transactions across multiple wallets
-3. **Monitor**: Use the balance checker to monitor your positions
-4. **Sell**: When ready, sell all tokens from all wallets
+### 3. Copy Trading with Filters
+When a monitored wallet makes a trade:
+1. Check if wallet meets criteria (win rate, etc.)
+2. **If `requireArbSignal=true`**: Verify arbitrage opportunity exists in that market
+3. Calculate position size (scaled by multiplier)
+4. Check risk limits
+5. Execute copy trade (or full arbitrage if internal arb detected)
 
-## Project Structure
+### 4. Risk Management
+- Tracks all positions and exposure
+- Enforces limits before opening new positions
+- Monitors daily PnL
+- Suggests hedging for unbalanced positions
 
-```
-├── src/
-│   ├── constants/          # Configuration constants
-│   ├── services/           # Business logic services
-│   │   ├── PumpfunService.ts    # Pump.fun program interactions
-│   │   ├── MetadataService.ts   # Token metadata creation/upload
-│   │   ├── BundleService.ts     # Bundle transaction creation
-│   │   ├── BloxRouteService.ts  # BloxRoute bundle submission
-│   │   └── WalletService.ts     # Wallet operations
-│   ├── types/              # TypeScript type definitions
-│   ├── utils/              # Utility functions
-│   ├── idl/                # Anchor IDL files
-│   └── createPool.ts       # Main pool creation logic
-├── layout/                 # UI layout components
-├── menu/                   # Menu system
-├── wallets/                # Wallet storage (JSON files)
-├── config.ts              # Configuration and connection setup
-├── settings.ts             # User-configurable settings
-└── index.ts               # Application entry point
-```
+## Strategy Logic
 
-For detailed architecture information, see [ARCHITECTURE.md](./ARCHITECTURE.md).
+### Pure Arbitrage Mode
+When an internal arbitrage opportunity is detected:
+- Buy both YES and NO tokens
+- Lock in guaranteed profit on market resolution
+- Profit = $1 - (YES_price + NO_price) - fees
 
-## Technologies
+### Copy Trading Mode
+When copying a wallet trade:
+- Replicate the trade proportionally
+- Only execute if arbitrage signal exists (if enabled)
+- Scale position size by configured multiplier
 
-- **@solana/web3.js** - Solana blockchain interaction
-- **@coral-xyz/anchor** - Anchor framework for Solana programs
-- **@raydium-io/raydium-sdk** - Raydium SDK for liquidity pools
-- **jito-ts** - Jito bundle transaction support
-- **@metaplex-foundation/js** - Metaplex for token metadata
-- **axios** - HTTP requests for BloxRoute and IPFS
-- **TypeScript** - Type-safe development
-
-## Key Features Explained
-
-### Bundle Transactions
-The application uses Jito bundles to execute multiple transactions atomically. This ensures that all buy transactions either succeed together or fail together, preventing partial fills.
-
-### BloxRoute Integration
-BloxRoute is used as an alternative bundle submission method, providing additional reliability and speed for transaction execution.
-
-### Multi-Wallet Strategy
-The tool creates and manages multiple wallets to execute coordinated buy/sell operations, maximizing the chances of successful execution during high-activity periods.
+### Hybrid Mode (Recommended)
+- Monitor arbitrage-focused wallets
+- Copy their trades when arbitrage opportunities align
+- Combines reliability of arb with directional upside
 
 ## Important Notes
 
-⚠️ **Security Warning**: 
-- Never commit your `.env` file or wallet JSON files to version control
-- Keep your private keys secure
-- Use test wallets on devnet before using mainnet
+### ⚠️ Current Limitations
+- **On-Chain Event Parsing**: May need refinement based on actual Polymarket contract event structure
+- **API Response Format**: Order book transformation assumes specific format - may need adjustment
+- **Cross-Platform Arb**: Requires external API integrations (Kalshi, etc.) - not critical for basic functionality
 
-⚠️ **Financial Risk**:
-- Trading cryptocurrencies involves significant risk
-- This tool is for educational and development purposes
-- Always test thoroughly on devnet before using on mainnet
-- Be aware of transaction fees and slippage
+### 🔧 Implementation Notes
+- The bot is designed to be extensible - add your own API integrations
+- WebSocket support is included for real-time updates
+- All components are async/await for high performance
+- TypeScript provides type safety and better IDE support
 
-⚠️ **Rate Limits**:
-- Be mindful of RPC rate limits
-- Consider using private RPC endpoints for production use
-- Monitor your transaction success rates
+### 💰 Fee Considerations
+Polymarket introduced taker fees on short-term markets (15-min crypto markets):
+- Fees are higher on ~50/50 priced trades
+- Lower fees near 10¢/90¢ extremes
+- Market makers receive rebates
+- Account for fees in arbitrage calculations (currently assumes ~1%)
 
-## Development
+### 🚨 Risk Warnings
+- **Not Financial Advice**: This is experimental software
+- **Test Thoroughly**: Start with small positions
+- **Slippage**: Fast execution is critical for small edges
+- **Competition**: Many bots compete for the same opportunities
+- **Platform Changes**: Polymarket may change fees/rules
 
-### Code Structure
-The codebase follows a clean architecture pattern with:
-- **Services**: Business logic in singleton service classes
-- **Utils**: Reusable utility functions
-- **Types**: TypeScript type definitions for type safety
-- **Constants**: Centralized configuration values
+## Extending the Bot
 
-### Adding New Features
-1. Create or extend services in `src/services/`
-2. Add types in `src/types/` if needed
-3. Update constants in `src/constants/` if adding configuration
-4. Add menu options in `menu/menu.ts` and handlers in `index.ts`
+### Add Cross-Platform Arbitrage
+1. Integrate Kalshi API (or other platform) in `arbitrage-detector.ts`
+2. Implement market matching logic
+3. Add price comparison and profit calculation
 
-## Troubleshooting
+### Improve Wallet Monitoring
+1. Implement on-chain event parsing (ethers.js or web3.js)
+2. Use Polymarket's activity API if available
+3. Add websocket subscriptions for real-time updates
 
-### Common Issues
+### Add More Filters
+- Win rate tracking per wallet
+- Market category filters
+- Time-based filters (e.g., only trade during certain hours)
+- Volume-based filters
 
-**"Creator wallet not found"**
-- Ensure wallet files exist in the `wallets/` directory
-- Check that wallet JSON files are properly formatted
+## Logging
 
-**"Bundle submission failed"**
-- Verify Jito and BloxRoute credentials
-- Check network connectivity
-- Ensure sufficient SOL balance for fees
+Logs are written to:
+- Console (using console.log/error/warn)
+- Can be extended with Winston or other logging libraries
 
-**"Metadata upload failed"**
-- Verify Pinata API credentials
-- Check IPFS connectivity
-- Ensure metadata object is properly formatted
+## License
 
-## Contributing && Contact
+This is experimental software. Use at your own risk.
 
-Contributions are welcome! Please open an issue or pull request for any improvements.
-Feel free to reach out me for any suggestions and questions, you're always welcome.
-<br>
-Telegram - [Hodlwarden](https://t.me/hodlwarden)
+## Contributing
+
+This is a starting point. Key areas for improvement:
+1. Complete API integrations (wallet monitoring, order signing)
+2. Add cross-platform arbitrage detection
+3. Implement advanced risk metrics
+4. Add backtesting capabilities
+5. Performance optimizations
+
