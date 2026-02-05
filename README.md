@@ -22,6 +22,9 @@ A sophisticated **trading bot** written in **Rust** that combines **arbitrage de
 
 **Keywords**: `polymarket` `arbitrage` `copy-trading` `trading-bot` `rust` `polygon` `prediction-markets` `automated-trading` `defi` `ethereum` `blockchain` `market-making` `risk-management` `wallet-monitoring` `crypto-trading` `quantitative-trading` `algorithmic-trading` `polymarket-api` `polygon-blockchain` `smart-contracts` `web3` `trading-strategy` `arbitrage-bot` `copy-trade` `polymarket-bot`
 
+<img width="1532" height="724" alt="image" src="https://github.com/user-attachments/assets/4acf9a5d-4ea4-435e-b0db-face455a60b3" />
+
+
 ## 📋 Table of Contents
 
 - [Features](#features)
