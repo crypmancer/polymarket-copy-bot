@@ -1,603 +1,154 @@
-# Polymarket Arbitrage + Copy Trading Bot
+# Polymarket Copy Trading
 
-<div align="center">
+A **Polymarket** copy-trading bot that watches a target wallet’s trades in real time and mirrors them on your account with configurable size, order type, and optional auto-redemption of resolved markets.
 
-![Rust](https://img.shields.io/badge/rust-%23000000.svg?style=for-the-badge&logo=rust&logoColor=white)
-![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)
-![Polygon](https://img.shields.io/badge/polygon-8247E5?style=for-the-badge&logo=polygon&logoColor=white)
-![License](https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge)
+## Contact
 
-**A sophisticated trading bot written in Rust that combines arbitrage detection and copy trading strategies on Polymarket**
+For support or suggestions:
 
-[Features](#features) • [Quick Start](#setup) • [Documentation](#architecture) • [Contributing](#contributing)
-
-[![GitHub stars](https://img.shields.io/github/stars/crypmancer/polymarket-arbitrage-copy-bot?style=social)](https://github.com/crypmancer/polymarket-arbitrage-copy-bot/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/crypmancer/polymarket-arbitrage-copy-bot?style=social)](https://github.com/crypmancer/polymarket-arbitrage-copy-bot/network/members)
-
-</div>
-
----
-
-A sophisticated **trading bot** written in **Rust** that combines **arbitrage detection** and **copy trading** strategies on **Polymarket**. This bot monitors successful wallets (like arbitrage-focused bots) and selectively copies their trades when arbitrage opportunities are detected.
-
-**Keywords**: `polymarket` `arbitrage` `copy-trading` `trading-bot` `rust` `polygon` `prediction-markets` `automated-trading` `defi` `ethereum` `blockchain` `market-making` `risk-management` `wallet-monitoring` `crypto-trading` `quantitative-trading` `algorithmic-trading` `polymarket-api` `polygon-blockchain` `smart-contracts` `web3` `trading-strategy` `arbitrage-bot` `copy-trade` `polymarket-bot`
-
-## 📋 Table of Contents
-
-- [Features](#features)
-- [Quick Start](#setup)
-- [Architecture](#architecture)
-- [Configuration](#configuration)
-- [How It Works](#how-it-works)
-- [Strategy Logic](#strategy-logic)
-- [Development](#development)
-- [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [License](#license)
-- [Contact](#contact)
-
-## Topics
-
-`polymarket` • `arbitrage` • `copy-trading` • `trading-bot` • `rust` • `polygon` • `prediction-markets` • `automated-trading` • `defi` • `ethereum` • `blockchain` • `market-making` • `risk-management` • `wallet-monitoring` • `crypto-trading` • `quantitative-trading` • `algorithmic-trading` • `polymarket-api` • `polygon-blockchain` • `smart-contracts` • `web3` • `trading-strategy` • `arbitrage-bot` • `copy-trade` • `polymarket-bot` • `trading-automation` • `crypto-arbitrage` • `defi-trading`
+[![Telegram](https://img.shields.io/badge/Telegram-@cryp_mancer-2CA5E0?style=flat-square&logo=telegram&logoColor=white)](https://t.me/cryp_mancer)  
+[![Gmail](https://img.shields.io/badge/Gmail-crypmancer@gmail.com-EA4335?style=flat-square&logo=gmail&logoColor=white)](mailto:crypmancer@gmail.com)
 
 ## Features
 
-### 🎯 Dual Strategy Approach
-- **Arbitrage Detection**: Automatically detects risk-free arbitrage opportunities (YES + NO < $1)
-- **Copy Trading**: Monitors and replicates trades from proven wallets
-- **Hybrid Filtering**: Only copies trades when arbitrage signals align
+- **Real-time copy trading** – Subscribes to Polymarket’s activity feed and copies trades from a chosen wallet as they happen.
+- **Configurable execution** – Size multiplier, max order size, order type (FAK/FOK), tick size, and neg-risk support.
+- **USDC & CLOB setup** – Approves USDC allowances and syncs with the CLOB API on startup.
+- **Automatic redemption** – Optional periodic redemption of resolved markets (with copy trading paused during redemption).
+- **Standalone redeem tools** – Redeem by condition ID or run batch redemption from holdings/API.
 
-### 🔍 Key Capabilities
-- Real-time wallet monitoring for target addresses
-- Internal arbitrage detection (YES+NO mispricings)
-- Cross-platform arbitrage support (extensible to Kalshi, etc.)
-- Risk management with position limits and daily loss controls
-- Automatic hedging for unbalanced positions
-- Configurable position sizing and filters
-- High-performance async/await architecture
-- Memory-safe Rust implementation
+## Requirements
 
-### 🛡️ Risk Management
-- Total exposure limits
-- Per-market position caps
-- Daily loss limits
-- Minimum liquidity requirements
-- Slippage protection
+- **Node.js** 18+ (or **Bun** for redeem/auto-redeem scripts)
+- **Polygon** wallet with USDC for trading and gas
 
-## Contact
+## Quick Start
 
-If you have any question or collaboration offer, feel free to text me. You're always welcome!
-
-**Telegram**: [@cryp_mancer](https://t.me/cryp_mancer)
-
-## Architecture
-
-The bot is structured as a modular Rust application with clear separation of concerns:
-
-```
-src/
-├── main.rs                  # Application entry point
-├── bot.rs                   # Main orchestrator (PolymarketArbCopyBot)
-├── config.rs                # Configuration management (load_config)
-├── polymarket_client.rs     # Polymarket API client
-├── arbitrage_detector.rs    # Arbitrage opportunity detection
-├── wallet_monitor.rs        # Wallet activity monitoring
-├── copy_trader.rs          # Copy trading execution engine
-├── risk_manager.rs         # Risk limits and position tracking
-├── order_executor.rs       # Order placement and management
-└── on_chain_monitor.rs     # On-chain event monitoring
-```
-
-### Module Overview
-
-- **`main.rs`**: Entry point that initializes the bot and handles graceful shutdown
-- **`bot.rs`**: Main orchestrator that coordinates all components
-- **`config.rs`**: Loads configuration from environment variables and provides typed config structs
-- **`polymarket_client.rs`**: HTTP client for Polymarket APIs (CLOB, Gamma, Data APIs)
-- **`arbitrage_detector.rs`**: Scans markets for arbitrage opportunities (internal and cross-platform)
-- **`wallet_monitor.rs`**: Monitors target wallets for new trades and positions
-- **`copy_trader.rs`**: Executes copy trades based on wallet activity and arbitrage signals
-- **`risk_manager.rs`**: Enforces risk limits and tracks positions/exposure
-- **`order_executor.rs`**: Manages order placement and cancellation
-- **`on_chain_monitor.rs`**: On-chain event monitoring (Polygon blockchain)
-
-## Setup
-
-### Prerequisites
-
-- **Rust 1.70+** (install from [rustup.rs](https://rustup.rs/))
-- **Cargo** (comes with Rust installation)
-- **Polygon RPC endpoint** (for on-chain monitoring)
-- **Polymarket API access** (some endpoints may require authentication)
-
-### 1. Install Rust
-
-If you don't have Rust installed:
-
-**Linux/macOS:**
-```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
-```
-
-**Windows:**
-Download and run the installer from [rustup.rs](https://rustup.rs/)
-
-Verify installation:
-```bash
-rustc --version
-cargo --version
-```
-
-### 2. Clone and Build
+### 1. Install dependencies
 
 ```bash
-# Clone the repository (if applicable)
-# cd polymarket-arbitrage-copy-bot
-
-# Build the project
-cargo build --release
-
-# Or build in development mode
-cargo build
+npm install
 ```
 
-### 3. Configure Environment
+### 2. Environment variables
 
-Create a `.env` file in the project root:
-
-```bash
-# Copy example (if available)
-cp .env.example .env
-
-# Or create manually
-touch .env
-```
-
-Add the following configuration to `.env`:
-
-```env
-# Required: Target wallet to monitor
-TARGET_WALLET_1=0x1234567890123456789012345678901234567890
-
-# Required: Polygon RPC endpoint
-POLYGON_RPC_URL=https://polygon-rpc.com
-
-# Required: Your private key for signing orders
-PRIVATE_KEY=your_private_key_here
-
-# Optional: API key if needed
-API_KEY=your_api_key_here
-
-# Optional: Risk limits
-MAX_TOTAL_EXPOSURE_USD=10000.0
-MAX_POSITION_PER_MARKET_USD=2000.0
-MAX_DAILY_LOSS_USD=500.0
-
-# Optional: Arbitrage settings
-MIN_ARB_PROFIT_PCT=0.01
-MAX_ARB_PROFIT_PCT=0.05
-INTERNAL_ARB_ENABLED=true
-CROSS_PLATFORM_ENABLED=false
-
-# Optional: Logging
-LOG_LEVEL=INFO
-```
-
-**Key Environment Variables:**
+Create a `.env` file in the project root. Required and optional variables:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `TARGET_WALLET_1` | Yes | Wallet address to copy trade (get from Polymarket profile) |
-| `PRIVATE_KEY` | Yes | Your private key for signing orders |
-| `POLYGON_RPC_URL` | Yes | Polygon RPC endpoint for on-chain monitoring |
-| `API_KEY` | No | Polymarket API key (if required) |
-| `MAX_TOTAL_EXPOSURE_USD` | No | Maximum total exposure limit (default: 10000.0) |
-| `MIN_ARB_PROFIT_PCT` | No | Minimum arbitrage profit % to execute (default: 0.01) |
+| `PRIVATE_KEY` | Yes | Your wallet private key (for signing orders and redeeming). |
+| `TARGET_WALLET` | Yes* | Ethereum address of the wallet whose trades to copy. |
+| `RPC_TOKEN` | Yes** | Polygon RPC URL or API token (e.g. Alchemy/Infura) for chain and contract calls. |
+| `CHAIN_ID` | No | Chain ID (default: Polygon). |
+| `CLOB_API_URL` | No | CLOB API base URL (default: `https://clob.polymarket.com`). |
+| `USER_REAL_TIME_DATA_URL` | No | Real-time data WebSocket host (uses Polymarket default if unset). |
+| `SIZE_MULTIPLIER` | No | Multiply copied size by this (default: `1.0`). |
+| `MAX_ORDER_AMOUNT` | No | Cap per order size (no cap if unset). |
+| `ORDER_TYPE` | No | `FAK` or `FOK` (default: `FAK`). |
+| `TICK_SIZE` | No | `0.1`, `0.01`, `0.001`, or `0.0001` (default: `0.01`). |
+| `NEG_RISK` | No | `true` or `false` for neg-risk markets. |
+| `ENABLE_COPY_TRADING` | No | `true` or `false` (default: `true`). |
+| `REDEEM_DURATION` | No | Auto-redeem interval in **minutes** (e.g. `60` = every hour). If set, copy trading is paused during redemption. |
+| `DEBUG` | No | `true` for extra logging. |
 
-### 4. Get Wallet Address
+\* Required when copy trading is enabled.  
+\** Required for allowance checks and redemption.
 
-To find a wallet address from a Polymarket username:
+**Example `.env`:**
 
-1. Visit the profile page (e.g., `https://polymarket.com/@gabagool22`)
-2. Open browser developer tools (F12)
-3. Check the profile page source or network requests to find the wallet address
-4. Alternatively, use Polymarket Analytics or Dune queries
+```env
+PRIVATE_KEY=0x...
+TARGET_WALLET=0x...
+RPC_TOKEN=https://polygon-mainnet.g.alchemy.com/v2/YOUR_KEY
 
-### 5. Run the Bot
+# Optional
+SIZE_MULTIPLIER=1.0
+MAX_ORDER_AMOUNT=100
+ORDER_TYPE=FAK
+TICK_SIZE=0.01
+NEG_RISK=false
+REDEEM_DURATION=60
+```
+
+### 3. Run the bot
 
 ```bash
-# Run in release mode (optimized)
-cargo run --release
-
-# Run in development mode (with debug info)
-cargo run
-
-# Run with custom log level
-RUST_LOG=debug cargo run --release
-RUST_LOG=info cargo run --release
+npm start
 ```
 
-## Configuration
+This will:
 
-### Wallet Configuration
+1. Create credentials if needed.
+2. Initialize the CLOB client and approve USDC allowances (when copy trading is enabled).
+3. Connect to the real-time feed and subscribe to `activity:trades`.
+4. Copy trades from `TARGET_WALLET` using your configured multiplier and limits.
+5. If `REDEEM_DURATION` is set, run redemption on that interval and pause copy trading during redemption.
 
-Wallet configuration is loaded from environment variables via `src/config.rs`. You can modify the `load_config()` function to add more wallets or customize settings.
+## Scripts
 
-Configuration structure (defined in `config.rs`):
+| Command | Description |
+|--------|-------------|
+| `npm start` | Start the copy-trading bot (`ts-node src/index.ts`). |
+| `npm run redeem` | Standalone redemption by condition ID (`ts-node src/redeem.ts`). |
 
-```rust
-WalletConfig {
-    address: String,              // Wallet address (0x...)
-    name: String,                 // Wallet name/identifier
-    enabled: bool,                // Whether to monitor this wallet
-    min_win_rate: f64,            // Minimum win rate (0.0 to 1.0)
-    max_position_size_usd: f64,   // Maximum position size in USD
-    position_size_multiplier: f64, // Copy multiplier (0.0 to 1.0)
-    markets_filter: Option<Vec<String>>, // Optional market filter
-    require_arb_signal: bool,     // Only copy when arbitrage detected
-}
-```
+### Redeem script
 
-Example configuration:
-```rust
-WalletConfig {
-    address: "0x1234...".to_string(),
-    name: "gabagool22".to_string(),
-    enabled: true,
-    min_win_rate: 0.70,
-    max_position_size_usd: 2000.0,
-    position_size_multiplier: 0.01,  // Copy 1% of wallet's position
-    require_arb_signal: true,  // Only copy when arbitrage detected
-}
-```
-
-### Arbitrage Settings
-
-Configure arbitrage detection in `src/config.rs`:
-
-- `min_arb_profit_pct`: Minimum profit % to execute (default: 1%)
-- `max_arb_profit_pct`: Maximum expected profit % (default: 5%)
-- `internal_arb_enabled`: Enable YES+NO arbitrage detection
-- `cross_platform_enabled`: Enable cross-platform arbitrage (requires additional APIs)
-- `min_liquidity_usd`: Minimum liquidity required (default: 1000.0)
-- `max_slippage_pct`: Maximum acceptable slippage (default: 2%)
-
-### Risk Limits
-
-Configure risk management in `src/config.rs`:
-
-- `max_total_exposure_usd`: Maximum total exposure across all positions
-- `max_position_per_market_usd`: Maximum position size per market
-- `max_daily_loss_usd`: Daily loss limit before pausing trading
-- `enable_auto_hedge`: Automatically hedge unbalanced positions
-- `min_balance_usd`: Minimum balance to keep (default: 100.0)
-
-## How It Works
-
-### 1. Initialization
-
-When the bot starts (`main.rs` → `bot.rs`):
-1. Loads configuration from environment variables
-2. Initializes Polymarket API client
-3. Sets up risk manager with configured limits
-4. Initializes arbitrage detector
-5. Creates copy traders for each monitored wallet
-6. Starts wallet monitoring
-
-### 2. Wallet Monitoring
-
-The `WalletMonitor` continuously monitors configured wallet addresses:
-- Polls Polymarket API for new positions/trades
-- Tracks trade history and deduplicates
-- Triggers callbacks when new trades are detected
-
-### 3. Arbitrage Detection
-
-The `ArbitrageDetector` scans markets for opportunities:
-- **Internal Arbitrage**: Detects when YES + NO prices sum to < $1 (risk-free profit)
-- **Cross-Platform**: Compares prices across platforms (extensible)
-- Updates active opportunities map
-
-### 4. Copy Trading with Filters
-
-When a monitored wallet makes a trade:
-1. `WalletMonitor` detects the new trade
-2. `CopyTrader` processes the trade:
-   - Checks if wallet meets criteria (enabled, win rate, etc.)
-   - Verifies market filter (if configured)
-   - **If `require_arb_signal=true`**: Checks for arbitrage opportunity
-   - Calculates position size (scaled by multiplier)
-   - Checks risk limits via `RiskManager`
-   - Executes trade via `OrderExecutor`
-
-### 5. Risk Management
-
-The `RiskManager` enforces limits:
-- Tracks all open positions
-- Calculates total exposure
-- Monitors daily PnL
-- Validates new position requests against limits
-- Suggests hedging for unbalanced positions
-
-### 6. Order Execution
-
-The `OrderExecutor` handles order placement:
-- Places orders via Polymarket API
-- Tracks active orders
-- Handles order cancellation
-- Updates risk manager on successful orders
-
-## Strategy Logic
-
-### Pure Arbitrage Mode
-
-When an internal arbitrage opportunity is detected:
-- Buy both YES and NO tokens simultaneously
-- Lock in guaranteed profit on market resolution
-- Profit = $1 - (YES_price + NO_price) - fees
-
-Example:
-- YES price: $0.48
-- NO price: $0.49
-- Total: $0.97
-- Profit: $0.03 per $1 invested (3% before fees)
-
-### Copy Trading Mode
-
-When copying a wallet trade:
-- Replicate the trade proportionally (based on multiplier)
-- Only execute if arbitrage signal exists (if `require_arb_signal=true`)
-- Scale position size by configured multiplier
-- Maintain risk limits
-
-Example:
-- Monitored wallet buys $1000 of YES
-- Position multiplier: 0.01 (1%)
-- Your position: $10 of YES
-
-### Hybrid Mode (Recommended)
-
-- Monitor arbitrage-focused wallets
-- Copy their trades when arbitrage opportunities align
-- Combines reliability of arb with directional upside
-- Filters trades through arbitrage detector
-
-## Project Structure
-
-```
-polymarket-arbitrage-copy-bot/
-├── Cargo.toml              # Rust project configuration and dependencies
-├── Cargo.lock              # Dependency lock file (auto-generated)
-├── README.md               # This file
-├── .env                    # Environment variables (create this)
-├── .gitignore             # Git ignore patterns
-│
-├── src/
-│   ├── main.rs            # Application entry point
-│   ├── bot.rs             # Main bot orchestrator
-│   ├── config.rs          # Configuration management
-│   ├── polymarket_client.rs    # Polymarket API client
-│   ├── arbitrage_detector.rs   # Arbitrage detection logic
-│   ├── wallet_monitor.rs       # Wallet monitoring
-│   ├── copy_trader.rs          # Copy trading engine
-│   ├── risk_manager.rs         # Risk management
-│   ├── order_executor.rs       # Order execution
-│   └── on_chain_monitor.rs     # On-chain monitoring
-│
-└── target/                # Build output (gitignored)
-    ├── debug/             # Development builds
-    └── release/           # Release builds
-```
-
-## Development
-
-### Running Tests
+Redeem a single market by condition ID:
 
 ```bash
-# Run all tests
-cargo test
-
-# Run tests with output
-cargo test -- --nocapture
-
-# Run specific test
-cargo test test_name
+npm run redeem -- <conditionId> [indexSet1 indexSet2 ...]
+# Example:
+npm run redeem -- 0x5f65177b394277fd294cd75650044e32ba009a95022d88a0c1d565897d72f8f1 1 2
 ```
 
-### Building for Production
+Or set in `.env`:
+
+```env
+CONDITION_ID=0x5f65177b394277fd294cd75650044e32ba009a95022d88a0c1d565897d72f8f1
+INDEX_SETS=1,2
+```
+
+Then:
 
 ```bash
-# Build optimized release binary
-cargo build --release
-
-# The binary will be at:
-# target/release/polymarket-arbitrage-copy-bot (Unix)
-# target/release/polymarket-arbitrage-copy-bot.exe (Windows)
+npm run redeem
 ```
 
-### Development Workflow
+If no condition ID is given, the script prints current holdings and usage.
+
+### Auto-redeem script (Bun)
+
+For batch redemption and market checks, use the auto-redeem script (Bun):
 
 ```bash
-# Format code
-cargo fmt
-
-# Lint code
-cargo clippy
-
-# Check for issues without building
-cargo check
-
-# Run in development mode
-cargo run
+bun src/auto-redeem.ts                    # Redeem all resolved markets from holdings
+bun src/auto-redeem.ts --api              # Fetch markets from API and redeem winning positions
+bun src/auto-redeem.ts --dry-run          # Preview only, no redemption
+bun src/auto-redeem.ts --check <conditionId>  # Check if a market is resolved
 ```
 
-### Debugging
+## Project structure
 
-```bash
-# Run with debug logging
-RUST_LOG=debug cargo run
-
-# Run with trace logging (very verbose)
-RUST_LOG=trace cargo run
-
-# Run specific module logging
-RUST_LOG=polymarket_arbitrage_copy_bot::bot=debug cargo run
+```
+src/
+├── index.ts              # Main copy-trading bot entry
+├── redeem.ts             # CLI: redeem by condition ID
+├── auto-redeem.ts        # Batch redemption and --check (Bun)
+├── order-builder/        # Order construction and copy-trade execution
+├── providers/            # CLOB client and real-time WebSocket provider
+├── security/             # Credentials, USDC allowance, CLOB balance allowance
+└── utils/                # Types, logger, balance, holdings, redeem helpers
 ```
 
-## Logging
+## How it works
 
-The bot uses the `log` crate with `env_logger` for logging.
+1. **Connection** – The bot connects to Polymarket’s real-time data service and subscribes to trade activity.
+2. **Filtering** – Each trade is checked for `proxyWallet === TARGET_WALLET`.
+3. **Copy** – Matching trades are sent to the order builder, which places orders on the CLOB with your `SIZE_MULTIPLIER`, `MAX_ORDER_AMOUNT`, `ORDER_TYPE`, `TICK_SIZE`, and `NEG_RISK` settings.
+4. **Redemption** – If `REDEEM_DURATION` is set, on a timer the bot pauses copy trading, runs redemption (e.g. from `token-holding.json`), then resumes.
 
-**Log Levels:**
-- `error`: Error conditions
-- `warn`: Warning conditions
-- `info`: Informational messages (default)
-- `debug`: Debug-level messages
-- `trace`: Trace-level messages (very verbose)
+## Security notes
 
-**Configure Logging:**
-```bash
-# Set log level via environment variable
-RUST_LOG=info cargo run
-RUST_LOG=debug cargo run
-RUST_LOG=warn cargo run
-
-# Or set in .env file
-LOG_LEVEL=DEBUG
-```
-
-## Dependencies
-
-Key dependencies (see `Cargo.toml` for full list):
-
-- **tokio**: Async runtime
-- **reqwest**: HTTP client
-- **serde/serde_json**: JSON serialization
-- **anyhow**: Error handling
-- **ethers**: Ethereum/Polygon integration
-- **chrono**: Date/time handling
-- **log/env_logger**: Logging
-- **dotenv**: Environment variable loading
-- **tokio-tungstenite**: WebSocket support
-
-## Important Notes
-
-### ⚠️ Current Limitations
-
-- **On-Chain Event Parsing**: May need refinement based on actual Polymarket contract event structure
-- **API Response Format**: Order book transformation assumes specific format - may need adjustment
-- **Cross-Platform Arb**: Requires external API integrations (Kalshi, etc.) - not critical for basic functionality
-- **Order Signing**: EIP-712 signature implementation may need adjustment based on Polymarket's exact requirements
-
-### 🔧 Implementation Notes
-
-- The bot is designed to be extensible - add your own API integrations
-- WebSocket support is included for real-time updates (can be extended)
-- All components use async/await (Tokio) for high performance
-- Rust provides memory safety and excellent performance
-- Thread-safe design using `Arc` and `Mutex`/`RwLock` where needed
-
-### 💰 Fee Considerations
-
-Polymarket introduced taker fees on short-term markets (15-min crypto markets):
-- Fees are higher on ~50/50 priced trades
-- Lower fees near 10¢/90¢ extremes
-- Market makers receive rebates
-- Account for fees in arbitrage calculations (currently assumes ~1%)
-
-### 🚨 Risk Warnings
-
-- **Not Financial Advice**: This is experimental software
-- **Test Thoroughly**: Start with small positions
-- **Slippage**: Fast execution is critical for small edges
-- **Competition**: Many bots compete for the same opportunities
-- **Platform Changes**: Polymarket may change fees/rules
-- **Private Keys**: Never commit private keys to version control
-- **Production Use**: Review and test all code before using with real funds
-
-## Extending the Bot
-
-### Add Cross-Platform Arbitrage
-
-1. Integrate Kalshi API (or other platform) in `arbitrage_detector.rs`
-2. Implement market matching logic
-3. Add price comparison and profit calculation
-4. Update `ArbitrageConfig` to include new platform settings
-
-### Improve Wallet Monitoring
-
-1. Implement on-chain event parsing using `ethers-rs` in `on_chain_monitor.rs`
-2. Use Polymarket's activity API if available
-3. Add WebSocket subscriptions for real-time updates
-4. Implement position tracking with deduplication
-
-### Add More Filters
-
-- Win rate tracking per wallet
-- Market category filters
-- Time-based filters (e.g., only trade during certain hours)
-- Volume-based filters
-- Price movement filters
-
-### Add Features
-
-- Backtesting capabilities
-- Performance metrics and analytics
-- Database persistence for trades/positions
-- Web dashboard for monitoring
-- Telegram/Discord notifications
-
-## Troubleshooting
-
-### Common Issues
-
-**"No wallets configured" error:**
-- Ensure `TARGET_WALLET_1` is set in `.env` file
-- Check that the wallet address is valid (starts with `0x`)
-
-**API connection errors:**
-- Verify `POLYGON_RPC_URL` is correct and accessible
-- Check network connectivity
-- Some RPC endpoints have rate limits
-
-**Compilation errors:**
-- Ensure Rust is up to date: `rustup update`
-- Clear build cache: `cargo clean`
-- Check that all dependencies are compatible
-
-**Runtime errors:**
-- Enable debug logging: `RUST_LOG=debug cargo run`
-- Check `.env` file for missing required variables
-- Verify API endpoints are accessible
-
-## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-This is a starting point for a trading bot. Key areas for improvement:
-
-1. Complete API integrations (wallet monitoring, order signing)
-2. Add cross-platform arbitrage detection
-3. Implement advanced risk metrics
-4. Add backtesting capabilities
-5. Performance optimizations
-6. Add comprehensive tests
-7. Improve error handling
-8. Add monitoring and alerting
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-**DISCLAIMER**: This software is provided "as is" without warranty of any kind. Trading cryptocurrencies and prediction markets involves substantial risk of loss. The authors are not responsible for any losses incurred from using this software.
-
-## Contact
-
-For questions, collaboration, or support:
-
-**Telegram**: [@cryp_mancer](https://t.me/cryp_mancer)
-
----
-
-**Note**: This bot is for educational and research purposes. Always test thoroughly before using with real funds. Start with small positions and understand the risks involved in automated trading.
+- **Never commit `.env` or your `PRIVATE_KEY`.** Use environment variables or a secrets manager in production.
+- Run with a dedicated wallet and only fund it with what you’re willing to trade.
+- Copy trading carries risk; the bot mirrors another wallet’s actions without guarantees.
