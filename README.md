@@ -1,6 +1,6 @@
 # Polymarket Copy Trading
 
-A **Polymarket** copy-trading bot that watches a target wallet’s trades in real time and mirrors them on your account with configurable size, order type, and optional auto-redemption of resolved markets.
+A **Polymarket** copy trading bot that watches a target wallet’s trades in real time and mirrors them on your account with configurable size, order type, and optional auto-redemption of resolved markets.
 
 ## Contact
 
