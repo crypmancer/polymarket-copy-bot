@@ -8,7 +8,6 @@ yarn.lock
 
 # TypeScript
 *.tsbuildinfo
-dist/
 build/
 
 # Environment variables

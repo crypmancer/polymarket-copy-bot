@@ -3,12 +3,23 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "ts-node src/index.ts",
-    "onchain": "ts-node src/monitor.ts",
-    "redeem": "ts-node src/redeem.ts",
+    "start": "ts-node dist/index.js",
+    "redeem": "ts-node dist/redeem.js",
+    "build": "tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["polymarket", "polymarket-copy-bot", "polymarket-copy-trading-bot", "copy-trading", "copy-trading-bot", "prediction-markets", "polymarket-bot", "mirror-trading", "clob", "trading-bot"],
+  "keywords": [
+    "polymarket",
+    "polymarket-copy-bot",
+    "polymarket-copy-trading-bot",
+    "copy-trading",
+    "copy-trading-bot",
+    "prediction-markets",
+    "polymarket-bot",
+    "mirror-trading",
+    "clob",
+    "trading-bot"
+  ],
   "author": "",
   "license": "ISC",
   "description": "Polymarket copy bot & polymarket copy trading bot — real-time mirror/copy trading on Polymarket prediction markets with configurable size and auto-redemption.",
@@ -22,7 +33,7 @@
     "@ethersproject/wallet": "^5.8.0",
     "@polymarket/clob-client": "^4.22.8",
     "@polymarket/real-time-data-client": "^1.4.0",
-    "chalk": "^5.6.2",
+    "chalk": "^4.1.2",
     "dotenv": "^17.2.3",
     "ethers": "^6.16.0"
   }

@@ -8,8 +8,10 @@ import { config as dotenvConfig } from "dotenv";
 import { Chain, getContractConfig } from "@polymarket/clob-client";
 import { logger } from "./logger";
 import { getClobClient } from "../providers/clobclient";
+import dotenv from 'dotenv';
 
 dotenvConfig({ path: resolve(process.cwd(), ".env") });
+dotenv.config()
 
 // CTF Contract ABI - functions needed for redemption and checking resolution
 const CTF_ABI = [
@@ -179,18 +181,18 @@ const CTF_ABI = [
  * Get RPC provider URL based on chain ID
  */
 function getRpcUrl(chainId: number): string {
-    const rpcToken = process.env.RPC_TOKEN;
+    const rpc_url = process.env.RPC_URL;
     
     if (chainId === 137) {
         // Polygon Mainnet
-        if (rpcToken) {
-            return `https://polygon-mainnet.g.alchemy.com/v2/${rpcToken}`;
+        if (rpc_url) {
+            return rpc_url;
         }
         return "https://polygon-rpc.com";
     } else if (chainId === 80002) {
         // Polygon Amoy Testnet
-        if (rpcToken) {
-            return `https://polygon-amoy.g.alchemy.com/v2/${rpcToken}`;
+        if (rpc_url) {
+            return rpc_url;
         }
         return "https://rpc-amoy.polygon.technology";
     }

@@ -28,18 +28,18 @@ const CTF_ABI = [
  * Get RPC provider URL based on chain ID
  */
 function getRpcUrl(chainId: number): string {
-    const rpcToken = process.env.RPC_TOKEN;
+    const rpc_url = process.env.RPC_URL;
     
     if (chainId === 137) {
         // Polygon Mainnet
-        if (rpcToken) {
-            return `https://polygon-mainnet.g.alchemy.com/v2/${rpcToken}`;
+        if (rpc_url) {
+            return rpc_url;
         }
         return "https://polygon-rpc.com";
     } else if (chainId === 80002) {
         // Polygon Amoy Testnet
-        if (rpcToken) {
-            return `https://polygon-amoy.g.alchemy.com/v2/${rpcToken}`;
+        if (rpc_url) {
+            return rpc_url;
         }
         return "https://rpc-amoy.polygon.technology";
     }
